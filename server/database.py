@@ -36,3 +36,17 @@ def initialize_database():
 
     connection.commit()
     connection.close()
+    
+def cleanup_old_conversations():
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        """
+        DELETE FROM conversations
+        WHERE timestamp < datetime('now', '-3 days')
+        """
+    )
+
+    connection.commit()
+    connection.close()    

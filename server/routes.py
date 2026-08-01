@@ -27,3 +27,13 @@ def chat(request: ChatRequest):
     return {
         "reply": reply
     }
+
+    
+@router.post("/memory/pin")
+def pin_memory(content: str):
+    agent.memory.add_pinned_memory(content)
+
+    return {
+        "status": "saved",
+        "memory": content
+    }

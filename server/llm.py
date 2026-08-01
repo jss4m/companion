@@ -1,3 +1,4 @@
+from click import prompt
 import requests
 
 
@@ -20,19 +21,37 @@ class LLM:
 
         return data["response"]
 
+    def format_memories(self, memories):
+        if not memories:
+            return "No pinned information."
+
+        return "\n".join(
+          f"- {memory}"
+           for memory in memories
+        )
+
     def build_prompt(self, prompt):
+
+        print("PINNED:", prompt.pinned_memories)
 
         return f"""
 You are a private personal companion.
 
-Personality:
-{prompt.personality}
+Follow these rules:
+- Keep replies under 30 words.
+- Be calm, warm, and slightly teasing.
+- Do not give advice unless the user asks.
+- Answer the user's actual question first.
 
-Conversation:
-{prompt.memories}
+Important user preferences:
+{prompt.pinned_memories}
 
-User:
+Recent conversation:
+Pinned user information:
+{self.format_memories(prompt.pinned_memories)}
+
+Current user message:
 {prompt.user_message}
 
-Reply naturally and keep it under 30 words.
+Your response:
 """

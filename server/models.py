@@ -8,3 +8,4 @@ class Prompt:
     memories: List[Dict[str, str]]
     personality: str
     plan: Dict[str, Any]
+    pinned_memories: list

@@ -1,3 +1,6 @@
+from email import message
+from multiprocessing.dummy import connection
+
 from .database import get_connection
 
 
@@ -53,3 +56,67 @@ class MemoryManager:
 
         connection.commit()
         connection.close()
+    
+    
+    def get_pinned_memories(self):
+        print("[Memory] pinned retrieve")
+
+        connection = get_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            SELECT content
+            FROM pinned_memories
+            ORDER BY id DESC
+            """
+        )
+
+        rows = cursor.fetchall()
+
+        connection.close()
+
+        return [
+            row[0]
+            for row in rows
+        ]
+
+
+    def add_pinned_memory(self, content):
+        print("[Memory] pinned store")
+
+        connection = get_connection()
+        cursor = connection.cursor()
+
+        cursor.execute(
+            """
+            INSERT INTO pinned_memories
+            (content)
+            VALUES (?)
+            """,
+            (content,)
+        )
+
+        connection.commit()
+        connection.close()
+        
+    def get_relevant_pinned_memories(self, message):
+        pinned = self.get_pinned_memories()
+
+        if not pinned:
+            return []
+
+        message_words = set(message.lower().split())
+
+        relevant = []
+
+        for memory in pinned:
+            memory_words = set(memory.lower().split())
+
+            if message_words & memory_words:
+                relevant.append(memory)
+
+        if relevant:
+            return relevant
+
+        return pinned[:2]

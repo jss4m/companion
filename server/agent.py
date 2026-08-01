@@ -13,11 +13,13 @@ class Agent:
 
     def chat(self, message: str):
         memories = self.memory.retrieve(message)
-
+        
+        pinned_memories = self.memory.get_relevant_pinned_memories(message)
+        
         plan = self.planner.create_plan(message, memories)
 
-        prompt = self.personality.build_prompt(message, memories, plan)
-        
+        prompt = self.personality.build_prompt(message, memories, pinned_memories, plan)
+                
         reply = self.llm.generate(prompt)
 
         self.memory.store(message, reply)
