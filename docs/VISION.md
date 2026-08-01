@@ -1,0 +1,1 @@
+Companion is a private, home-hosted conversational agent designed for companionship during quiet hours. It communicates calmly with concise replies, remembers recent conversations, respects user control over long-term memory, and runs locally without relying on cloud services.

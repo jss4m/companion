@@ -1,23 +1,7 @@
 from fastapi import FastAPI
-from pydantic import BaseModel
+
+from .routes import router
 
 app = FastAPI()
 
-
-class ChatRequest(BaseModel):
-    message: str
-
-
-@app.get("/")
-def home():
-    return {
-        "status": "online",
-        "name": "Companion"
-    }
-
-
-@app.post("/chat")
-def chat(request: ChatRequest):
-    return {
-        "reply": f"You said: {request.message}"
-    }
+app.include_router(router)
