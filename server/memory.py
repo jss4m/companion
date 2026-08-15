@@ -1,6 +1,3 @@
-from email import message
-from multiprocessing.dummy import connection
-
 from .database import get_connection
 
 
