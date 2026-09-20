@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import type { ChatMessage } from "./types";
 import { sendMessage } from "./api";
@@ -18,13 +18,25 @@ function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [messages, loading]);
+
   async function handleSend() {
-    if (!input.trim() || loading) return;
+    const text = input.trim();
+
+    if (!text || loading) {
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: crypto.randomUUID(),
       sender: "user",
-      text: input,
+      text,
       timestamp: Date.now(),
     };
 
@@ -33,7 +45,7 @@ function App() {
     setLoading(true);
 
     try {
-      const data = await sendMessage(userMessage.text);
+      const data = await sendMessage(text);
 
       const assistantMessage: ChatMessage = {
         id: crypto.randomUUID(),
@@ -43,33 +55,48 @@ function App() {
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
-
-    } catch (error) {
+    } catch {
       setMessages((prev) => [
         ...prev,
         {
           id: crypto.randomUUID(),
           sender: "assistant",
-          text: "Connection error.",
+          text: "I couldn't reach the companion server.",
           timestamp: Date.now(),
         },
       ]);
+    } finally {
+      setLoading(false);
     }
+  }
 
-    setLoading(false);
+  function handleKeyDown(
+    event: React.KeyboardEvent<HTMLInputElement>
+  ) {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleSend();
+    }
   }
 
   return (
     <div className="app">
       <TulipWatermark />
-      <div className="chat-container">
 
+      <div className="chat-container">
         <header className="header">
-          <h2>Personal Companion</h2>
-          <p>Always present • Quiet reflection</p>
+          <div>
+            <h2>Personal Companion</h2>
+            <p>Always present • Quiet reflection</p>
+          </div>
+
+          <div className="header-status">
+            <span className="status-dot" />
+            <span>Online</span>
+          </div>
         </header>
 
-        <div className="messages">
+        <main className="messages">
           {messages.map((message) => (
             <div
               key={message.id}
@@ -82,11 +109,11 @@ function App() {
               )}
 
               <div className="message">
-                <strong>
+                <span className="message-sender">
                   {message.sender === "user"
                     ? "You"
                     : "Companion"}
-                </strong>
+                </span>
 
                 <p>{message.text}</p>
               </div>
@@ -95,28 +122,44 @@ function App() {
 
           {loading && (
             <div className="message-row assistant">
-              <div className="message">
-                Thinking...
+              <div className="assistant-avatar">
+                <TulipIcon className="tulip-icon" />
+              </div>
+
+              <div className="message thinking-message">
+                <span className="message-sender">
+                  Companion
+                </span>
+
+                <div className="thinking-indicator">
+                  <span />
+                  <span />
+                  <span />
+                </div>
               </div>
             </div>
           )}
-        </div>
+
+          <div ref={messagesEndRef} />
+        </main>
 
         <div className="input-area">
           <input
             value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") handleSend();
-            }}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={handleKeyDown}
             placeholder="Talk to your companion..."
+            disabled={loading}
+            autoComplete="off"
           />
 
-          <button onClick={handleSend}>
-            Send
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || loading}
+          >
+            {loading ? "..." : "Send"}
           </button>
         </div>
-
       </div>
     </div>
   );
