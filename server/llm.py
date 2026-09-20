@@ -1,9 +1,8 @@
 import requests
 
+
 class LLM:
-
     def generate(self, prompt):
-
         print("[LLM] generating")
 
         response = requests.post(
@@ -15,31 +14,31 @@ class LLM:
             }
         )
 
+        response.raise_for_status()
+
         data = response.json()
 
         return data["response"]
 
     def format_conversation(self, memories):
         if not memories:
-            return "No recent conversation."
+            return "No recent user messages."
 
         return "\n".join(
-            f"User: {memory['user']}\n"
-            f"Companion: {memory['assistant']}"
+            f"User: {memory['user']}"
             for memory in memories
         )
 
     def format_pinned_memories(self, memories):
         if not memories:
-            return "No pinned information."
+            return "No known user facts."
 
         return "\n".join(
             f"- {memory}"
             for memory in memories
         )
-        
-    def build_prompt(self, prompt):
 
+    def build_prompt(self, prompt):
         print("PINNED:", prompt.pinned_memories)
 
         return f"""
@@ -58,12 +57,13 @@ Rules:
 - Sometimes simply acknowledge what the user says.
 - Sound like a close, calm companion.
 - Keep replies under 30 words.
-
+- Known user facts come only from the section below.
+- If a user fact is not there, say you don't know.
 
 Recent conversation:
 {self.format_conversation(prompt.memories)}
 
-Pinned user information:
+Known user facts:
 {self.format_pinned_memories(prompt.pinned_memories)}
 
 Current user message:
