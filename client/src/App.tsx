@@ -12,7 +12,7 @@ import {
 import TulipIcon from "./components/TulipIcon";
 import TulipWatermark from "./components/TulipWatermark";
 
-type VoiceState = "idle" | "listening" | "processing";
+type VoiceState = "idle" | "listening";
 
 function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -47,6 +47,7 @@ function App() {
 
   async function handleSend() {
     const text = input.trim();
+
 
     if (!text || loading || voiceState !== "idle") {
       return;
@@ -87,6 +88,8 @@ function App() {
     } finally {
       setLoading(false);
     }
+
+
   }
 
   async function handleVoice() {
@@ -94,12 +97,11 @@ function App() {
       return;
     }
 
+
     setVoiceState("listening");
 
     try {
       const data = await sendVoice(5);
-
-      setVoiceState("processing");
 
       if (data.text) {
         const userMessage: ChatMessage = {
@@ -135,11 +137,14 @@ function App() {
     } finally {
       setVoiceState("idle");
     }
+
+
   }
 
   async function loadMemories() {
     setMemoryLoading(true);
     setMemoryError("");
+
 
     try {
       const data = await getMemories();
@@ -149,16 +154,21 @@ function App() {
     } finally {
       setMemoryLoading(false);
     }
+
+
   }
 
   async function toggleMemories() {
     const nextState = !showMemories;
+
 
     setShowMemories(nextState);
 
     if (nextState) {
       await loadMemories();
     }
+
+
   }
 
   function startEditing(memory: PinnedMemory) {
@@ -173,6 +183,7 @@ function App() {
 
   async function saveMemory(memoryId: number) {
     const content = editingContent.trim();
+
 
     if (!content) {
       return;
@@ -198,10 +209,12 @@ function App() {
     } catch {
       setMemoryError("Couldn't update that memory.");
     }
+
   }
 
   async function handleDeleteMemory(memoryId: number) {
     setMemoryError("");
+
 
     try {
       await deleteMemory(memoryId);
@@ -218,6 +231,7 @@ function App() {
     } catch {
       setMemoryError("Couldn't delete that memory.");
     }
+
   }
 
   function handleKeyDown(
@@ -231,246 +245,237 @@ function App() {
 
   const busy = loading || voiceState !== "idle";
 
-  return (
-    <div className="app">
-      <TulipWatermark />
+  return (<div className="app"> <TulipWatermark />
 
-      <div className="chat-container">
-        <header className="header">
-          <div>
-            <h2>Personal Companion</h2>
-            <p>Always present • Quiet reflection</p>
-          </div>
 
-          <div className="header-actions">
-            <button
-              className={`memory-button ${
-                showMemories ? "active" : ""
+    <div className="chat-container">
+      <header className="header">
+        <div>
+          <h2>Personal Companion</h2>
+          <p>Always present • Quiet reflection</p>
+        </div>
+
+        <div className="header-actions">
+          <button
+            className={`memory-button ${showMemories ? "active" : ""
               }`}
-              onClick={toggleMemories}
-            >
-              Memories
-            </button>
+            onClick={toggleMemories}
+          >
+            Memories
+          </button>
 
-            <div className="header-status">
-              <span className="status-dot" />
-              <span>Online</span>
-            </div>
+          <div className="header-status">
+            <span className="status-dot" />
+            <span>Online</span>
           </div>
-        </header>
+        </div>
+      </header>
 
-        {showMemories && (
-          <section className="memory-panel">
-            <div className="memory-panel-header">
-              <div>
-                <h3>Known memories</h3>
-                <p>Facts your companion has saved.</p>
-              </div>
-
-              <button
-                className="memory-refresh"
-                onClick={loadMemories}
-                disabled={memoryLoading}
-              >
-                Refresh
-              </button>
+      {showMemories && (
+        <section className="memory-panel">
+          <div className="memory-panel-header">
+            <div>
+              <h3>Known memories</h3>
+              <p>Facts your companion has saved.</p>
             </div>
 
-            {memoryLoading && (
-              <div className="memory-status">
-                Loading memories...
-              </div>
-            )}
+            <button
+              className="memory-refresh"
+              onClick={loadMemories}
+              disabled={memoryLoading}
+            >
+              Refresh
+            </button>
+          </div>
 
-            {memoryError && (
-              <div className="memory-error">
-                {memoryError}
-              </div>
-            )}
+          {memoryLoading && (
+            <div className="memory-status">
+              Loading memories...
+            </div>
+          )}
 
-            {!memoryLoading && !memoryError && memories.length === 0 && (
-              <div className="memory-status">
-                No pinned memories yet.
-              </div>
-            )}
+          {memoryError && (
+            <div className="memory-error">
+              {memoryError}
+            </div>
+          )}
 
-            {!memoryLoading && memories.length > 0 && (
-              <div className="memory-list">
-                {memories.map((memory) => (
-                  <div
-                    key={memory.id}
-                    className="memory-item"
-                  >
-                    {editingMemoryId === memory.id ? (
-                      <div className="memory-edit">
-                        <textarea
-                          value={editingContent}
-                          onChange={(event) =>
-                            setEditingContent(
-                              event.target.value
+          {!memoryLoading && !memoryError && memories.length === 0 && (
+            <div className="memory-status">
+              No pinned memories yet.
+            </div>
+          )}
+
+          {!memoryLoading && memories.length > 0 && (
+            <div className="memory-list">
+              {memories.map((memory) => (
+                <div
+                  key={memory.id}
+                  className="memory-item"
+                >
+                  {editingMemoryId === memory.id ? (
+                    <div className="memory-edit">
+                      <textarea
+                        value={editingContent}
+                        onChange={(event) =>
+                          setEditingContent(
+                            event.target.value
+                          )
+                        }
+                        autoFocus
+                      />
+
+                      <div className="memory-actions">
+                        <button
+                          onClick={() =>
+                            saveMemory(memory.id)
+                          }
+                        >
+                          Save
+                        </button>
+
+                        <button
+                          className="secondary"
+                          onClick={cancelEditing}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="memory-content">
+                        <span className="memory-id">
+                          #{memory.id}
+                        </span>
+
+                        <span>{memory.content}</span>
+                      </div>
+
+                      <div className="memory-actions">
+                        <button
+                          onClick={() =>
+                            startEditing(memory)
+                          }
+                        >
+                          Edit
+                        </button>
+
+                        <button
+                          className="delete"
+                          onClick={() =>
+                            handleDeleteMemory(
+                              memory.id
                             )
                           }
-                          autoFocus
-                        />
-
-                        <div className="memory-actions">
-                          <button
-                            onClick={() =>
-                              saveMemory(memory.id)
-                            }
-                          >
-                            Save
-                          </button>
-
-                          <button
-                            className="secondary"
-                            onClick={cancelEditing}
-                          >
-                            Cancel
-                          </button>
-                        </div>
+                        >
+                          Delete
+                        </button>
                       </div>
-                    ) : (
-                      <>
-                        <div className="memory-content">
-                          <span className="memory-id">
-                            #{memory.id}
-                          </span>
-
-                          <span>{memory.content}</span>
-                        </div>
-
-                        <div className="memory-actions">
-                          <button
-                            onClick={() =>
-                              startEditing(memory)
-                            }
-                          >
-                            Edit
-                          </button>
-
-                          <button
-                            className="delete"
-                            onClick={() =>
-                              handleDeleteMemory(
-                                memory.id
-                              )
-                            }
-                          >
-                            Delete
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
-
-        <main className="messages">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`message-row ${message.sender}`}
-            >
-              {message.sender === "assistant" && (
-                <div className="assistant-avatar">
-                  <TulipIcon className="tulip-icon" />
+                    </>
+                  )}
                 </div>
-              )}
-
-              <div className="message">
-                <span className="message-sender">
-                  {message.sender === "user"
-                    ? "You"
-                    : "Companion"}
-                </span>
-
-                <p>{message.text}</p>
-              </div>
+              ))}
             </div>
-          ))}
+          )}
+        </section>
+      )}
 
-          {loading && (
-            <div className="message-row assistant">
+      <main className="messages">
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`message-row ${message.sender}`}
+          >
+            {message.sender === "assistant" && (
               <div className="assistant-avatar">
                 <TulipIcon className="tulip-icon" />
               </div>
+            )}
 
-              <div className="message thinking-message">
-                <span className="message-sender">
-                  Companion
-                </span>
+            <div className="message">
+              <span className="message-sender">
+                {message.sender === "user"
+                  ? "You"
+                  : "Companion"}
+              </span>
 
-                <div className="thinking-indicator">
-                  <span />
-                  <span />
-                  <span />
-                </div>
+              <p>{message.text}</p>
+            </div>
+          </div>
+        ))}
+
+        {loading && (
+          <div className="message-row assistant">
+            <div className="assistant-avatar">
+              <TulipIcon className="tulip-icon" />
+            </div>
+
+            <div className="message thinking-message">
+              <span className="message-sender">
+                Companion
+              </span>
+
+              <div className="thinking-indicator">
+                <span />
+                <span />
+                <span />
               </div>
             </div>
-          )}
+          </div>
+        )}
 
-          {voiceState === "listening" && (
-            <div className="voice-status">
-              Listening...
-            </div>
-          )}
+        {voiceState === "listening" && (
+          <div className="voice-status">
+            Listening...
+          </div>
+        )}
 
-          {voiceState === "processing" && (
-            <div className="voice-status">
-              Processing...
-            </div>
-          )}
+        <div ref={messagesEndRef} />
+      </main>
 
-          <div ref={messagesEndRef} />
-        </main>
+      <div className="input-area">
+        <input
+          value={input}
+          onChange={(event) =>
+            setInput(event.target.value)
+          }
+          onKeyDown={handleKeyDown}
+          placeholder={
+            voiceState === "listening"
+              ? "Listening..."
+              : "Talk to your companion..."
+          }
+          disabled={busy}
+          autoComplete="off"
+        />
 
-        <div className="input-area">
-          <input
-            value={input}
-            onChange={(event) =>
-              setInput(event.target.value)
-            }
-            onKeyDown={handleKeyDown}
-            placeholder={
-              voiceState === "listening"
-                ? "Listening..."
-                : voiceState === "processing"
-                  ? "Processing..."
-                  : "Talk to your companion..."
-            }
-            disabled={busy}
-            autoComplete="off"
-          />
-
-          <button
-            className={`voice-button ${
-              voiceState === "listening"
-                ? "recording"
-                : ""
+        <button
+          className={`voice-button ${voiceState === "listening"
+            ? "recording"
+            : ""
             }`}
-            onClick={handleVoice}
-            disabled={busy}
-            aria-label="Talk by voice"
-            title="Talk by voice"
-          >
-            {voiceState === "listening"
-              ? "●"
-              : "Mic"}
-          </button>
+          onClick={handleVoice}
+          disabled={busy}
+          aria-label="Talk by voice"
+          title="Talk by voice"
+        >
+          {voiceState === "listening"
+            ? "●"
+            : "Mic"}
+        </button>
 
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || busy}
-          >
-            {loading ? "..." : "Send"}
-          </button>
-        </div>
+        <button
+          onClick={handleSend}
+          disabled={!input.trim() || busy}
+        >
+          {loading ? "..." : "Send"}
+        </button>
       </div>
     </div>
+  </div>
+
+
   );
 }
 
