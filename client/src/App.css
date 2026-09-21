@@ -45,6 +45,12 @@
   font-size: 13px;
 }
 
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
 .header-status {
   display: flex;
   align-items: center;
@@ -59,6 +65,156 @@
   height: 7px;
   border-radius: 50%;
   background: #7a9b78;
+}
+
+.memory-button,
+.memory-refresh {
+  border: 1px solid #ddd;
+  background: white;
+  color: #666;
+  border-radius: 10px;
+  padding: 7px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.memory-button:hover,
+.memory-refresh:hover:not(:disabled) {
+  background: #f6f6f6;
+}
+
+.memory-button.active {
+  background: #f1f1f1;
+  color: #333;
+}
+
+.memory-refresh:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.memory-panel {
+  border-bottom: 1px solid #eee;
+  background: #fcfcfc;
+  padding: 16px 20px;
+  max-height: 300px;
+  overflow-y: auto;
+  flex-shrink: 0;
+}
+
+.memory-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.memory-panel-header h3 {
+  margin: 0;
+  color: #444;
+  font-size: 14px;
+}
+
+.memory-panel-header p {
+  margin: 3px 0 0;
+  color: #999;
+  font-size: 11px;
+}
+
+.memory-status {
+  color: #999;
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.memory-error {
+  color: #9a5c5c;
+  font-size: 13px;
+  padding: 8px 0;
+}
+
+.memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.memory-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  background: white;
+  border: 1px solid #e7e7e7;
+  border-radius: 10px;
+}
+
+.memory-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  color: #444;
+  font-size: 13px;
+  line-height: 1.4;
+  min-width: 0;
+}
+
+.memory-id {
+  color: #aaa;
+  font-size: 11px;
+  flex-shrink: 0;
+  padding-top: 2px;
+}
+
+.memory-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.memory-actions button {
+  border: 1px solid #ddd;
+  background: white;
+  color: #666;
+  border-radius: 8px;
+  padding: 5px 8px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.memory-actions button:hover {
+  background: #f5f5f5;
+}
+
+.memory-actions button.secondary {
+  color: #888;
+}
+
+.memory-actions button.delete {
+  color: #965858;
+}
+
+.memory-edit {
+  width: 100%;
+}
+
+.memory-edit textarea {
+  width: 100%;
+  min-height: 60px;
+  resize: vertical;
+  box-sizing: border-box;
+  padding: 9px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  outline: none;
+  font: inherit;
+  font-size: 13px;
+}
+
+.memory-edit textarea:focus {
+  border-color: #999;
 }
 
 .messages {
@@ -176,6 +332,13 @@
   }
 }
 
+.voice-status {
+  text-align: center;
+  color: #999;
+  font-size: 12px;
+  padding: 4px 0 12px;
+}
+
 .input-area {
   display: flex;
   gap: 10px;
@@ -270,6 +433,14 @@
     padding: 16px;
   }
 
+  .header-actions {
+    gap: 8px;
+  }
+
+  .header-status {
+    display: none;
+  }
+
   .messages {
     padding: 20px 14px;
   }
@@ -280,5 +451,13 @@
 
   .input-area {
     padding: 12px;
+  }
+
+  .memory-panel {
+    padding: 14px;
+  }
+
+  .memory-item {
+    flex-direction: column;
   }
 }
