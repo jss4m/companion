@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import type { ChatMessage } from "./types";
-import { sendMessage } from "./api";
+import { sendMessage, sendVoice } from "./api";
 import TulipIcon from "./components/TulipIcon";
 import TulipWatermark from "./components/TulipWatermark";
+
+type VoiceState = "idle" | "listening" | "processing";
 
 function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -17,6 +19,7 @@ function App() {
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -24,12 +27,12 @@ function App() {
     messagesEndRef.current?.scrollIntoView({
       behavior: "smooth",
     });
-  }, [messages, loading]);
+  }, [messages, loading, voiceState]);
 
   async function handleSend() {
     const text = input.trim();
 
-    if (!text || loading) {
+    if (!text || loading || voiceState !== "idle") {
       return;
     }
 
@@ -70,6 +73,54 @@ function App() {
     }
   }
 
+  async function handleVoice() {
+    if (loading || voiceState !== "idle") {
+      return;
+    }
+
+    setVoiceState("listening");
+
+    try {
+      setVoiceState("processing");
+
+      const data = await sendVoice(5);
+
+      if (data.text) {
+        const userMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          sender: "user",
+          text: data.text,
+          timestamp: Date.now(),
+        };
+
+        setMessages((prev) => [...prev, userMessage]);
+      }
+
+      if (data.reply) {
+        const assistantMessage: ChatMessage = {
+          id: crypto.randomUUID(),
+          sender: "assistant",
+          text: data.reply,
+          timestamp: Date.now(),
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
+      }
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          sender: "assistant",
+          text: "I couldn't use the voice service.",
+          timestamp: Date.now(),
+        },
+      ]);
+    } finally {
+      setVoiceState("idle");
+    }
+  }
+
   function handleKeyDown(
     event: React.KeyboardEvent<HTMLInputElement>
   ) {
@@ -78,6 +129,8 @@ function App() {
       handleSend();
     }
   }
+
+  const busy = loading || voiceState !== "idle";
 
   return (
     <div className="app">
@@ -120,7 +173,7 @@ function App() {
             </div>
           ))}
 
-          {loading && (
+          {(loading || voiceState === "processing") && (
             <div className="message-row assistant">
               <div className="assistant-avatar">
                 <TulipIcon className="tulip-icon" />
@@ -148,14 +201,32 @@ function App() {
             value={input}
             onChange={(event) => setInput(event.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Talk to your companion..."
-            disabled={loading}
+            placeholder={
+              voiceState === "listening"
+                ? "Listening..."
+                : voiceState === "processing"
+                  ? "Processing..."
+                  : "Talk to your companion..."
+            }
+            disabled={busy}
             autoComplete="off"
           />
 
           <button
+            className={`voice-button ${
+              voiceState === "listening" ? "recording" : ""
+            }`}
+            onClick={handleVoice}
+            disabled={busy}
+            aria-label="Talk by voice"
+            title="Talk by voice"
+          >
+            {voiceState === "listening" ? "●" : "Mic"}
+          </button>
+
+          <button
             onClick={handleSend}
-            disabled={!input.trim() || loading}
+            disabled={!input.trim() || busy}
           >
             {loading ? "..." : "Send"}
           </button>

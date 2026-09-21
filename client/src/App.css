@@ -225,6 +225,27 @@
   cursor: default;
 }
 
+.input-area .voice-button {
+  min-width: 58px;
+  padding: 12px 14px;
+}
+
+.input-area .voice-button.recording {
+  background: #8b3a3a;
+  animation: voice-pulse 1.2s infinite ease-in-out;
+}
+
+@keyframes voice-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.65;
+  }
+}
+
 .tulip-watermark {
   position: absolute;
   right: 20px;
