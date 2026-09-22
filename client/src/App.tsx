@@ -4,11 +4,14 @@ import type { ChatMessage } from "./types";
 import {
   deleteMemory,
   getMemories,
+  processVoice,
   sendMessage,
-  sendVoice,
+  speakVoice,
   updateMemory,
+  uploadVoice,
   type PinnedMemory,
 } from "./api";
+import { AudioRecorder } from "./audio/recorder";
 import TulipIcon from "./components/TulipIcon";
 import TulipWatermark from "./components/TulipWatermark";
 
@@ -27,6 +30,7 @@ function App() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [voiceError, setVoiceError] = useState("");
 
   const [showMemories, setShowMemories] = useState(false);
   const [memories, setMemories] = useState<PinnedMemory[]>([]);
@@ -38,6 +42,7 @@ function App() {
   const [editingContent, setEditingContent] = useState("");
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const recorderRef = useRef<AudioRecorder | null>(null);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
@@ -45,9 +50,33 @@ function App() {
     });
   }, [messages, loading, voiceState]);
 
+  async function playVoice(audioBlob: Blob) {
+    const audioUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(audioUrl);
+
+    try {
+      await audio.play();
+
+      audio.addEventListener(
+        "ended",
+        () => {
+          URL.revokeObjectURL(audioUrl);
+        },
+        { once: true }
+      );
+    } catch (error) {
+      URL.revokeObjectURL(audioUrl);
+
+      if (error instanceof Error) {
+        throw error;
+      }
+
+      throw new Error("The browser couldn't play the voice response.");
+    }
+  }
+
   async function handleSend() {
     const text = input.trim();
-
 
     if (!text || loading || voiceState !== "idle") {
       return;
@@ -88,63 +117,96 @@ function App() {
     } finally {
       setLoading(false);
     }
-
-
   }
 
   async function handleVoice() {
-    if (loading || voiceState !== "idle") {
+    if (loading) {
       return;
     }
 
+    setVoiceError("");
 
-    setVoiceState("listening");
+    if (voiceState === "idle") {
+      const recorder = new AudioRecorder();
 
-    try {
-      const data = await sendVoice(5);
+      try {
+        await recorder.start();
 
-      if (data.text) {
-        const userMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          sender: "user",
-          text: data.text,
-          timestamp: Date.now(),
-        };
-
-        setMessages((prev) => [...prev, userMessage]);
+        recorderRef.current = recorder;
+        setVoiceState("listening");
+      } catch (error) {
+        setVoiceError(
+          error instanceof Error
+            ? error.message
+            : "I couldn't access the microphone."
+        );
       }
 
-      if (data.reply) {
-        const assistantMessage: ChatMessage = {
-          id: crypto.randomUUID(),
-          sender: "assistant",
-          text: data.reply,
-          timestamp: Date.now(),
-        };
-
-        setMessages((prev) => [...prev, assistantMessage]);
-      }
-    } catch {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: crypto.randomUUID(),
-          sender: "assistant",
-          text: "I couldn't use the voice service.",
-          timestamp: Date.now(),
-        },
-      ]);
-    } finally {
-      setVoiceState("idle");
+      return;
     }
 
+    const recorder = recorderRef.current;
 
+    if (!recorder) {
+      setVoiceState("idle");
+      return;
+    }
+
+    try {
+      const audio = await recorder.stop();
+
+      recorderRef.current = null;
+      setVoiceState("idle");
+      setLoading(true);
+
+      await uploadVoice(audio);
+
+      const result = await processVoice();
+
+      const text = result.text?.trim();
+      const reply = result.reply?.trim();
+
+      if (text) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            sender: "user",
+            text,
+            timestamp: Date.now(),
+          },
+        ]);
+      }
+
+      if (reply) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: crypto.randomUUID(),
+            sender: "assistant",
+            text: reply,
+            timestamp: Date.now(),
+          },
+        ]);
+
+        const voiceAudio = await speakVoice(reply);
+        await playVoice(voiceAudio);
+      }
+    } catch (error) {
+      setVoiceError(
+        error instanceof Error
+          ? error.message
+          : "I couldn't process the recording."
+      );
+    } finally {
+      recorderRef.current = null;
+      setLoading(false);
+    }
   }
 
   async function loadMemories() {
     setMemoryLoading(true);
     setMemoryError("");
-
 
     try {
       const data = await getMemories();
@@ -154,21 +216,16 @@ function App() {
     } finally {
       setMemoryLoading(false);
     }
-
-
   }
 
   async function toggleMemories() {
     const nextState = !showMemories;
-
 
     setShowMemories(nextState);
 
     if (nextState) {
       await loadMemories();
     }
-
-
   }
 
   function startEditing(memory: PinnedMemory) {
@@ -183,7 +240,6 @@ function App() {
 
   async function saveMemory(memoryId: number) {
     const content = editingContent.trim();
-
 
     if (!content) {
       return;
@@ -209,12 +265,10 @@ function App() {
     } catch {
       setMemoryError("Couldn't update that memory.");
     }
-
   }
 
   async function handleDeleteMemory(memoryId: number) {
     setMemoryError("");
-
 
     try {
       await deleteMemory(memoryId);
@@ -231,7 +285,6 @@ function App() {
     } catch {
       setMemoryError("Couldn't delete that memory.");
     }
-
   }
 
   function handleKeyDown(
@@ -245,237 +298,225 @@ function App() {
 
   const busy = loading || voiceState !== "idle";
 
-  return (<div className="app"> <TulipWatermark />
+  return (
+    <div className="app">
+      <TulipWatermark />
 
-
-    <div className="chat-container">
-      <header className="header">
-        <div>
-          <h2>Personal Companion</h2>
-          <p>Always present • Quiet reflection</p>
-        </div>
-
-        <div className="header-actions">
-          <button
-            className={`memory-button ${showMemories ? "active" : ""
-              }`}
-            onClick={toggleMemories}
-          >
-            Memories
-          </button>
-
-          <div className="header-status">
-            <span className="status-dot" />
-            <span>Online</span>
+      <div className="chat-container">
+        <header className="header">
+          <div>
+            <h2>Personal Companion</h2>
+            <p>Always present • Quiet reflection</p>
           </div>
-        </div>
-      </header>
 
-      {showMemories && (
-        <section className="memory-panel">
-          <div className="memory-panel-header">
-            <div>
-              <h3>Known memories</h3>
-              <p>Facts your companion has saved.</p>
-            </div>
-
+          <div className="header-actions">
             <button
-              className="memory-refresh"
-              onClick={loadMemories}
-              disabled={memoryLoading}
+              className={`memory-button ${showMemories ? "active" : ""
+                }`}
+              onClick={toggleMemories}
             >
-              Refresh
+              Memories
             </button>
+
+            <div className="header-status">
+              <span className="status-dot" />
+              <span>Online</span>
+            </div>
           </div>
+        </header>
 
-          {memoryLoading && (
-            <div className="memory-status">
-              Loading memories...
+        {showMemories && (
+          <section className="memory-panel">
+            <div className="memory-panel-header">
+              <div>
+                <h3>Known memories</h3>
+                <p>Facts your companion has saved.</p>
+              </div>
+
+              <button
+                className="memory-refresh"
+                onClick={loadMemories}
+                disabled={memoryLoading}
+              >
+                Refresh
+              </button>
             </div>
-          )}
 
-          {memoryError && (
-            <div className="memory-error">
-              {memoryError}
-            </div>
-          )}
-
-          {!memoryLoading && !memoryError && memories.length === 0 && (
-            <div className="memory-status">
-              No pinned memories yet.
-            </div>
-          )}
-
-          {!memoryLoading && memories.length > 0 && (
-            <div className="memory-list">
-              {memories.map((memory) => (
-                <div
-                  key={memory.id}
-                  className="memory-item"
-                >
-                  {editingMemoryId === memory.id ? (
-                    <div className="memory-edit">
-                      <textarea
-                        value={editingContent}
-                        onChange={(event) =>
-                          setEditingContent(
-                            event.target.value
-                          )
-                        }
-                        autoFocus
-                      />
-
-                      <div className="memory-actions">
-                        <button
-                          onClick={() =>
-                            saveMemory(memory.id)
-                          }
-                        >
-                          Save
-                        </button>
-
-                        <button
-                          className="secondary"
-                          onClick={cancelEditing}
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="memory-content">
-                        <span className="memory-id">
-                          #{memory.id}
-                        </span>
-
-                        <span>{memory.content}</span>
-                      </div>
-
-                      <div className="memory-actions">
-                        <button
-                          onClick={() =>
-                            startEditing(memory)
-                          }
-                        >
-                          Edit
-                        </button>
-
-                        <button
-                          className="delete"
-                          onClick={() =>
-                            handleDeleteMemory(
-                              memory.id
-                            )
-                          }
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-      )}
-
-      <main className="messages">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`message-row ${message.sender}`}
-          >
-            {message.sender === "assistant" && (
-              <div className="assistant-avatar">
-                <TulipIcon className="tulip-icon" />
+            {memoryLoading && (
+              <div className="memory-status">
+                Loading memories...
               </div>
             )}
 
-            <div className="message">
-              <span className="message-sender">
-                {message.sender === "user"
-                  ? "You"
-                  : "Companion"}
-              </span>
+            {memoryError && (
+              <div className="memory-error">
+                {memoryError}
+              </div>
+            )}
 
-              <p>{message.text}</p>
-            </div>
-          </div>
-        ))}
+            {!memoryLoading && !memoryError && memories.length === 0 && (
+              <div className="memory-status">
+                No pinned memories yet.
+              </div>
+            )}
 
-        {loading && (
-          <div className="message-row assistant">
-            <div className="assistant-avatar">
-              <TulipIcon className="tulip-icon" />
-            </div>
+            {!memoryLoading && memories.length > 0 && (
+              <div className="memory-list">
+                {memories.map((memory) => (
+                  <div key={memory.id} className="memory-item">
+                    {editingMemoryId === memory.id ? (
+                      <div className="memory-edit">
+                        <textarea
+                          value={editingContent}
+                          onChange={(event) =>
+                            setEditingContent(event.target.value)
+                          }
+                          autoFocus
+                        />
+                        <div className="memory-actions">
+                          <button
+                            onClick={() => saveMemory(memory.id)}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="secondary"
+                            onClick={cancelEditing}
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="memory-content">
+                          <span className="memory-id">
+                            #{memory.id}
+                          </span>
+                          <span>{memory.content}</span>
+                        </div>
+                        <div className="memory-actions">
+                          <button
+                            onClick={() => startEditing(memory)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="delete"
+                            onClick={() =>
+                              handleDeleteMemory(memory.id)
+                            }
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
-            <div className="message thinking-message">
-              <span className="message-sender">
-                Companion
-              </span>
+        <main className="messages">
+          {messages.map((message) => (
+            <div
+              key={message.id}
+              className={`message-row ${message.sender}`}
+            >
+              {message.sender === "assistant" && (
+                <div className="assistant-avatar">
+                  <TulipIcon className="tulip-icon" />
+                </div>
+              )}
 
-              <div className="thinking-indicator">
-                <span />
-                <span />
-                <span />
+              <div className="message">
+                <span className="message-sender">
+                  {message.sender === "user"
+                    ? "You"
+                    : "Companion"}
+                </span>
+                <p>{message.text}</p>
               </div>
             </div>
-          </div>
-        )}
+          ))}
 
-        {voiceState === "listening" && (
-          <div className="voice-status">
-            Listening...
-          </div>
-        )}
+          {loading && (
+            <div className="message-row assistant">
+              <div className="assistant-avatar">
+                <TulipIcon className="tulip-icon" />
+              </div>
+              <div className="message thinking-message">
+                <span className="message-sender">
+                  Companion
+                </span>
+                <div className="thinking-indicator">
+                  <span />
+                  <span />
+                  <span />
+                </div>
+              </div>
+            </div>
+          )}
 
-        <div ref={messagesEndRef} />
-      </main>
+          {voiceState === "listening" && (
+            <div className="voice-status">
+              Listening...
+            </div>
+          )}
 
-      <div className="input-area">
-        <input
-          value={input}
-          onChange={(event) =>
-            setInput(event.target.value)
-          }
-          onKeyDown={handleKeyDown}
-          placeholder={
-            voiceState === "listening"
-              ? "Listening..."
-              : "Talk to your companion..."
-          }
-          disabled={busy}
-          autoComplete="off"
-        />
+          {voiceError && (
+            <div className="voice-status">
+              {voiceError}
+            </div>
+          )}
 
-        <button
-          className={`voice-button ${voiceState === "listening"
-            ? "recording"
-            : ""
-            }`}
-          onClick={handleVoice}
-          disabled={busy}
-          aria-label="Talk by voice"
-          title="Talk by voice"
-        >
-          {voiceState === "listening"
-            ? "●"
-            : "Mic"}
-        </button>
+          <div ref={messagesEndRef} />
+        </main>
 
-        <button
-          onClick={handleSend}
-          disabled={!input.trim() || busy}
-        >
-          {loading ? "..." : "Send"}
-        </button>
+        <div className="input-area">
+          <input
+            value={input}
+            onChange={(event) => setInput(event.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={
+              voiceState === "listening"
+                ? "Listening..."
+                : "Talk to your companion..."
+            }
+            disabled={busy}
+            autoComplete="off"
+          />
+
+          <button
+            className={`voice-button ${voiceState === "listening" ? "recording" : ""
+              }`}
+            onClick={handleVoice}
+            disabled={loading}
+            aria-label={
+              voiceState === "listening"
+                ? "Stop recording"
+                : "Start recording"
+            }
+            title={
+              voiceState === "listening"
+                ? "Stop recording"
+                : "Start recording"
+            }
+          >
+            {voiceState === "listening" ? "●" : "Mic"}
+          </button>
+
+          <button
+            onClick={handleSend}
+            disabled={!input.trim() || busy}
+          >
+            {loading ? "..." : "Send"}
+          </button>
+        </div>
       </div>
     </div>
-  </div>
-
-
   );
 }
 

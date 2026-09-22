@@ -10,3 +10,7 @@ __pycache__/
 
 # Environment variables
 .env
+
+# Audio files
+voice_input.wav
+voice_output.wav
