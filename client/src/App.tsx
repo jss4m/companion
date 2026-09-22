@@ -15,7 +15,11 @@ import { AudioRecorder } from "./audio/recorder";
 import TulipIcon from "./components/TulipIcon";
 import TulipWatermark from "./components/TulipWatermark";
 
-type VoiceState = "idle" | "listening";
+type VoiceState =
+  | "idle"
+  | "listening"
+  | "processing"
+  | "speaking";
 
 function App() {
   const [messages, setMessages] = useState<ChatMessage[]>([
@@ -43,6 +47,8 @@ function App() {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recorderRef = useRef<AudioRecorder | null>(null);
+  const pointerActiveRef = useRef(false);
+  const pointerReleasedRef = useRef(false);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({
@@ -54,25 +60,65 @@ function App() {
     const audioUrl = URL.createObjectURL(audioBlob);
     const audio = new Audio(audioUrl);
 
-    try {
-      await audio.play();
+    setVoiceState("speaking");
+
+    return new Promise<void>((resolve, reject) => {
+      let settled = false;
+
+      const cleanup = () => {
+        URL.revokeObjectURL(audioUrl);
+      };
+
+      const finish = () => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        cleanup();
+        setVoiceState("idle");
+        resolve();
+      };
+
+      const fail = (error: Error) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        cleanup();
+        setVoiceState("idle");
+        reject(error);
+      };
 
       audio.addEventListener(
         "ended",
+        finish,
+        { once: true }
+      );
+
+      audio.addEventListener(
+        "error",
         () => {
-          URL.revokeObjectURL(audioUrl);
+          fail(
+            new Error(
+              "The browser couldn't play the voice response."
+            )
+          );
         },
         { once: true }
       );
-    } catch (error) {
-      URL.revokeObjectURL(audioUrl);
 
-      if (error instanceof Error) {
-        throw error;
-      }
-
-      throw new Error("The browser couldn't play the voice response.");
-    }
+      audio.play().catch((error) => {
+        fail(
+          error instanceof Error
+            ? error
+            : new Error(
+              "The browser couldn't play the voice response."
+            )
+        );
+      });
+    });
   }
 
   async function handleSend() {
@@ -119,36 +165,44 @@ function App() {
     }
   }
 
-  async function handleVoice() {
-    if (loading) {
+  async function startVoiceRecording() {
+    if (loading || voiceState !== "idle") {
       return;
     }
 
     setVoiceError("");
+    pointerReleasedRef.current = false;
 
-    if (voiceState === "idle") {
-      const recorder = new AudioRecorder();
+    const recorder = new AudioRecorder();
 
-      try {
-        await recorder.start();
+    try {
+      await recorder.start();
 
-        recorderRef.current = recorder;
-        setVoiceState("listening");
-      } catch (error) {
-        setVoiceError(
-          error instanceof Error
-            ? error.message
-            : "I couldn't access the microphone."
-        );
+      recorderRef.current = recorder;
+      setVoiceState("listening");
+
+      if (pointerReleasedRef.current) {
+        pointerReleasedRef.current = false;
+        await stopVoiceRecording();
       }
+    } catch (error) {
+      recorderRef.current = null;
+      pointerReleasedRef.current = false;
+      setVoiceState("idle");
 
-      return;
+      setVoiceError(
+        error instanceof Error
+          ? error.message
+          : "I couldn't access the microphone."
+      );
     }
+  }
 
+  async function stopVoiceRecording() {
     const recorder = recorderRef.current;
 
     if (!recorder) {
-      setVoiceState("idle");
+      pointerReleasedRef.current = true;
       return;
     }
 
@@ -156,7 +210,7 @@ function App() {
       const audio = await recorder.stop();
 
       recorderRef.current = null;
-      setVoiceState("idle");
+      setVoiceState("processing");
       setLoading(true);
 
       await uploadVoice(audio);
@@ -165,6 +219,11 @@ function App() {
 
       const text = result.text?.trim();
       const reply = result.reply?.trim();
+
+      if (!text && !reply) {
+        setVoiceState("idle");
+        return;
+      }
 
       if (text) {
         setMessages((prev) => [
@@ -191,8 +250,12 @@ function App() {
 
         const voiceAudio = await speakVoice(reply);
         await playVoice(voiceAudio);
+      } else {
+        setVoiceState("idle");
       }
     } catch (error) {
+      setVoiceState("idle");
+
       setVoiceError(
         error instanceof Error
           ? error.message
@@ -200,8 +263,56 @@ function App() {
       );
     } finally {
       recorderRef.current = null;
+      pointerReleasedRef.current = false;
       setLoading(false);
     }
+  }
+
+  function handleVoicePointerDown(
+    event: React.PointerEvent<HTMLButtonElement>
+  ) {
+    if (loading || voiceState !== "idle") {
+      return;
+    }
+
+    event.preventDefault();
+    pointerActiveRef.current = true;
+    pointerReleasedRef.current = false;
+
+    event.currentTarget.setPointerCapture(event.pointerId);
+    void startVoiceRecording();
+  }
+
+  function handleVoicePointerUp(
+    event: React.PointerEvent<HTMLButtonElement>
+  ) {
+    if (!pointerActiveRef.current) {
+      return;
+    }
+
+    event.preventDefault();
+    pointerActiveRef.current = false;
+
+    if (
+      event.currentTarget.hasPointerCapture(
+        event.pointerId
+      )
+    ) {
+      event.currentTarget.releasePointerCapture(
+        event.pointerId
+      );
+    }
+
+    void stopVoiceRecording();
+  }
+
+  function handleVoicePointerCancel() {
+    if (!pointerActiveRef.current) {
+      return;
+    }
+
+    pointerActiveRef.current = false;
+    void stopVoiceRecording();
   }
 
   async function loadMemories() {
@@ -296,7 +407,20 @@ function App() {
     }
   }
 
-  const busy = loading || voiceState !== "idle";
+  const busy =
+    loading ||
+    voiceState === "listening" ||
+    voiceState === "processing" ||
+    voiceState === "speaking";
+
+  const voiceButtonLabel =
+    voiceState === "listening"
+      ? "Release to stop recording"
+      : voiceState === "processing"
+        ? "Processing voice"
+        : voiceState === "speaking"
+          ? "Speaking"
+          : "Hold to record";
 
   return (
     <div className="app">
@@ -354,31 +478,42 @@ function App() {
               </div>
             )}
 
-            {!memoryLoading && !memoryError && memories.length === 0 && (
-              <div className="memory-status">
-                No pinned memories yet.
-              </div>
-            )}
+            {!memoryLoading &&
+              !memoryError &&
+              memories.length === 0 && (
+                <div className="memory-status">
+                  No pinned memories yet.
+                </div>
+              )}
 
             {!memoryLoading && memories.length > 0 && (
               <div className="memory-list">
                 {memories.map((memory) => (
-                  <div key={memory.id} className="memory-item">
+                  <div
+                    key={memory.id}
+                    className="memory-item"
+                  >
                     {editingMemoryId === memory.id ? (
                       <div className="memory-edit">
                         <textarea
                           value={editingContent}
                           onChange={(event) =>
-                            setEditingContent(event.target.value)
+                            setEditingContent(
+                              event.target.value
+                            )
                           }
                           autoFocus
                         />
+
                         <div className="memory-actions">
                           <button
-                            onClick={() => saveMemory(memory.id)}
+                            onClick={() =>
+                              saveMemory(memory.id)
+                            }
                           >
                             Save
                           </button>
+
                           <button
                             className="secondary"
                             onClick={cancelEditing}
@@ -393,18 +528,27 @@ function App() {
                           <span className="memory-id">
                             #{memory.id}
                           </span>
-                          <span>{memory.content}</span>
+
+                          <span>
+                            {memory.content}
+                          </span>
                         </div>
+
                         <div className="memory-actions">
                           <button
-                            onClick={() => startEditing(memory)}
+                            onClick={() =>
+                              startEditing(memory)
+                            }
                           >
                             Edit
                           </button>
+
                           <button
                             className="delete"
                             onClick={() =>
-                              handleDeleteMemory(memory.id)
+                              handleDeleteMemory(
+                                memory.id
+                              )
                             }
                           >
                             Delete
@@ -437,32 +581,48 @@ function App() {
                     ? "You"
                     : "Companion"}
                 </span>
+
                 <p>{message.text}</p>
               </div>
             </div>
           ))}
 
-          {loading && (
-            <div className="message-row assistant">
-              <div className="assistant-avatar">
-                <TulipIcon className="tulip-icon" />
-              </div>
-              <div className="message thinking-message">
-                <span className="message-sender">
-                  Companion
-                </span>
-                <div className="thinking-indicator">
-                  <span />
-                  <span />
-                  <span />
+          {loading &&
+            voiceState !== "speaking" && (
+              <div className="message-row assistant">
+                <div className="assistant-avatar">
+                  <TulipIcon className="tulip-icon" />
+                </div>
+
+                <div className="message thinking-message">
+                  <span className="message-sender">
+                    Companion
+                  </span>
+
+                  <div className="thinking-indicator">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            )}
 
           {voiceState === "listening" && (
             <div className="voice-status">
               Listening...
+            </div>
+          )}
+
+          {voiceState === "processing" && (
+            <div className="voice-status">
+              Processing...
+            </div>
+          )}
+
+          {voiceState === "speaking" && (
+            <div className="voice-status">
+              Speaking...
             </div>
           )}
 
@@ -478,34 +638,41 @@ function App() {
         <div className="input-area">
           <input
             value={input}
-            onChange={(event) => setInput(event.target.value)}
+            onChange={(event) =>
+              setInput(event.target.value)
+            }
             onKeyDown={handleKeyDown}
             placeholder={
               voiceState === "listening"
                 ? "Listening..."
-                : "Talk to your companion..."
+                : voiceState === "processing"
+                  ? "Processing..."
+                  : voiceState === "speaking"
+                    ? "Speaking..."
+                    : "Talk to your companion..."
             }
             disabled={busy}
             autoComplete="off"
           />
 
           <button
-            className={`voice-button ${voiceState === "listening" ? "recording" : ""
+            className={`voice-button ${voiceState === "listening"
+                ? "recording"
+                : ""
               }`}
-            onClick={handleVoice}
-            disabled={loading}
-            aria-label={
-              voiceState === "listening"
-                ? "Stop recording"
-                : "Start recording"
+            onPointerDown={handleVoicePointerDown}
+            onPointerUp={handleVoicePointerUp}
+            onPointerCancel={handleVoicePointerCancel}
+            disabled={
+              loading &&
+              voiceState !== "listening"
             }
-            title={
-              voiceState === "listening"
-                ? "Stop recording"
-                : "Start recording"
-            }
+            aria-label={voiceButtonLabel}
+            title={voiceButtonLabel}
           >
-            {voiceState === "listening" ? "●" : "Mic"}
+            {voiceState === "listening"
+              ? "●"
+              : "Mic"}
           </button>
 
           <button

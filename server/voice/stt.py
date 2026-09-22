@@ -1,10 +1,10 @@
 from pathlib import Path
+import re
 
 from faster_whisper import WhisperModel
 
 
 class STT:
-
     def __init__(
         self,
         model_size="base",
@@ -35,8 +35,38 @@ class STT:
             for segment in segments
         ).strip()
 
+        if self.is_non_speech(text):
+            text = ""
+
         return {
             "text": text,
             "language": info.language,
             "language_probability": info.language_probability
         }
+
+    def is_non_speech(self, text):
+        if not text:
+            return True
+
+        normalized = text.strip().lower()
+
+        if not normalized:
+            return True
+
+        normalized = re.sub(r"\s+", " ", normalized)
+
+        non_speech_patterns = [
+            r"^[.\s]+$",
+            r"^[…\s]+$",
+            r"^[-–—\s]+$",
+            r"^\*+\s*$",
+            r"^\[blank_audio\]$",
+            r"^\[silence\]$",
+            r"^\(silence\)$",
+            r"^\(blank audio\)$",
+        ]
+
+        return any(
+            re.fullmatch(pattern, normalized)
+            for pattern in non_speech_patterns
+        )
